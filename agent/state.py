@@ -12,8 +12,9 @@ class AgentState(TypedDict):
     triage_confidence: Optional[str] # high | medium | low
 
     # Analysis node output
-    root_cause_hypothesis: Optional[str]
+    root_cause: Optional[str]
     recommended_action: Optional[str]
+    severity: Optional[str]  # critical | high | medium | low
 
-    # Report node output
+    # Report node output (next step)
     report: Optional[str]
