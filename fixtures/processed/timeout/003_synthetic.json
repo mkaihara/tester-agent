@@ -1,0 +1,9 @@
+{
+  "failure_type": "timeout",
+  "runner": "github-actions",
+  "timestamp": "2026-05-26T09:58:17Z",
+  "test_name": "test_external_api_response",
+  "source_run_id": 0,
+  "source_file": "synthetic",
+  "raw_excerpt": "FAILED tests/test_integration.py::IntegrationTest::test_external_api_response\n\n================================ FAILURES ===================================\n___________ IntegrationTest::test_external_api_response ____________\n\nTraceback (most recent call last):\n  File \"/home/runner/work/myproject/tests/test_integration.py\", line 34, in test_external_api_response\n    response = client.get('/api/v2/reports', timeout=120)\n  File \"/opt/hostedtoolcache/Python/3.11.4/x64/lib/python3.11/site-packages/requests/adapters.py\", line 532, in send\n    raise ReadTimeout(e, request=request)\nrequests.exceptions.ReadTimeout: HTTPSConnectionPool(host='api.example.com', port=443): Read timed out. (read timeout=120)\n\nshort test summary info\nFAILED tests/test_integration.py - requests.exceptions.ReadTimeout: Read timed out after 120s\n1 failed in 120.8s"
+}
