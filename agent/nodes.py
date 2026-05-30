@@ -1,7 +1,3 @@
-import os
-import re
-import re
-from pydoc import text
 from langchain_anthropic import ChatAnthropic
 from agent.state import AgentState
 
@@ -38,7 +34,7 @@ Test excerpt:
     import json, re
     text = response.content
     # Extract the last JSON block — after the reasoning steps
-    matches = re.findall(r'\{[^{}]*"failure_type"[^{}]*\}', text, re.DOTALL)
+    matches = re.findall(r'\{[^{}]*"failure_type"[^{}]*\}', text)
     if not matches:
         raise ValueError(f"No JSON found in response:\n{text}")
 

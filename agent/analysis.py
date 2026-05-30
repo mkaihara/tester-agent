@@ -23,21 +23,25 @@ def get_llm():
 @tool
 def get_test_run_history(repo: str, test_name: str, lookback_runs: int = 10) -> dict:
     """
-    Retrieves recent CI run results for a repository and estimates flaky
-    probability based on pass/fail ratio across recent runs.
+    Retrieves recent CI run results for a specific test name by downloading
+    logs for each run and searching for pass/fail of that test.
 
     Args:
         repo: GitHub repo in 'owner/name' format e.g. 'python/cpython'
         test_name: the name of the test to look up
         lookback_runs: how many recent completed runs to check
     """
+    import zipfile
+    import io
+
     token = os.getenv("GITHUB_TOKEN")
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
     }
-
     owner, name = repo.split("/")
+
+    # Step 1 — fetch recent completed runs
     runs_url = f"https://api.github.com/repos/{owner}/{name}/actions/runs"
     response = requests.get(
         runs_url,
@@ -47,20 +51,65 @@ def get_test_run_history(repo: str, test_name: str, lookback_runs: int = 10) -> 
     response.raise_for_status()
     runs = response.json()["workflow_runs"]
 
-    failures = sum(1 for r in runs if r["conclusion"] == "failure")
-    total = len(runs)
+    # Step 2 — for each run, download logs and search for the test name
+    results = []
+    for run in runs:
+        run_id = run["id"]
+        logs_url = f"https://api.github.com/repos/{owner}/{name}/actions/runs/{run_id}/logs"
+
+        try:
+            log_response = requests.get(
+                logs_url,
+                headers=headers,
+                allow_redirects=True,
+                timeout=10
+            )
+            if log_response.status_code != 200:
+                continue
+
+            # Unzip and search all log files for the test name
+            zip_file = zipfile.ZipFile(io.BytesIO(log_response.content))
+            run_outcome = "not_found"
+
+            for log_name in zip_file.namelist():
+                content = zip_file.open(log_name).read().decode("utf-8", errors="replace")
+
+                # Check for explicit pass or fail of this specific test
+                if f"{test_name} ... ok" in content or f"PASSED {test_name}" in content or f"{test_name} PASSED" in content:
+                    run_outcome = "passed"
+                    break
+                elif f"{test_name} ... FAIL" in content or f"FAILED {test_name}" in content \
+                        or f"{test_name} ... ERROR" in content or f"{test_name} FAILED" in content:
+                    run_outcome = "failed"
+                    break
+
+            if run_outcome != "not_found":
+                results.append({
+                    "run_id": run_id,
+                    "created_at": run["created_at"],
+                    "outcome": run_outcome,
+                })
+
+        except Exception:
+            # Skip runs where logs are unavailable or expired
+            continue
+
+    # Step 3 — compute flaky probability from test-level results
+    total = len(results)
+    failures = sum(1 for r in results if r["outcome"] == "failed")
+    passes = sum(1 for r in results if r["outcome"] == "passed")
     flaky_probability = round(failures / total, 2) if total > 0 else 0.0
 
     return {
         "test_name": test_name,
-        "runs_checked": total,
+        "runs_checked": lookback_runs,
+        "runs_with_test_found": total,
         "failures": failures,
-        "passes": total - failures,
+        "passes": passes,
         "flaky_probability": flaky_probability,
-        # genuinely flaky: fails sometimes but not always
         "verdict": "flaky" if 0.1 < flaky_probability < 0.9 else "consistent",
+        "history": results,  # full per-run breakdown for the LLM to reason over
     }
-
 
 # ---------------------------------------------------------------------------
 # Per-type prompt templates 

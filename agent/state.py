@@ -16,5 +16,5 @@ class AgentState(TypedDict):
     recommended_action: Optional[str]
     severity: Optional[str]  # critical | high | medium | low
 
-    # Report node output (next step)
+    # Report node output
     report: Optional[str]
