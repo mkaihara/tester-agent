@@ -1,6 +1,8 @@
+from email.mime import text
 import os
 import json
 import re
+from urllib import response
 import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
@@ -209,6 +211,17 @@ Excerpt:
 """,
 }
 
+def _extract_text(response) -> str:
+    """Safely extracts text content from an LLM response regardless of format."""
+    if isinstance(response.content, str):
+        return response.content
+    # content is a list of blocks — find the text block
+    for block in response.content:
+        if isinstance(block, dict) and block.get("type") == "text":
+            return block["text"]
+        if hasattr(block, "type") and block.type == "text":
+            return block.text
+    return ""
 
 # ---------------------------------------------------------------------------
 # Flaky analysis node — with tool calling
@@ -254,22 +267,28 @@ Excerpt:
     messages = [HumanMessage(content=prompt)]
     response = llm_with_tools.invoke(messages)
 
-    # If the model decided to call the tool, execute it and feed the result back
-    if response.tool_calls:
+     # Loop until the model stops making tool calls
+    max_iterations = 5  # safety cap to prevent infinite loops
+    iterations = 0
+
+    while response.tool_calls and iterations < max_iterations:
+        iterations += 1
         tool_call = response.tool_calls[0]
         tool_result = get_test_run_history.invoke(tool_call["args"])
 
-        messages = [
-            HumanMessage(content=prompt),
-            response,
+        messages.append(response)
+        messages.append(
             ToolMessage(
                 content=json.dumps(tool_result),
                 tool_call_id=tool_call["id"],
-            ),
-        ]
+            )
+        )
         response = llm_with_tools.invoke(messages)
 
-    text = response.content
+    text = _extract_text(response)
+    if not text:
+        raise ValueError(f"No text content in response: {response.content}")
+
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if not match:
         raise ValueError(f"No JSON found in flaky analysis response:\n{text}")

@@ -1,0 +1,10 @@
+{
+  "failure_type": "regression",
+  "repo": "python/cpython",
+  "runner": "github-actions",
+  "timestamp": "2026-05-28T11:42:17Z",
+  "test_name": "test_json_encode_float",
+  "source_run_id": 0,
+  "source_file": "synthetic",
+  "raw_excerpt": "FAILED Lib/test/test_json/test_encode.py::TestJSONEncode::test_json_encode_float\n\n================================ FAILURES ===================================\n___________ TestJSONEncode::test_json_encode_float ____________\n\nLib/test/test_json/test_encode.py:47: in test_json_encode_float\n    assert json.dumps(1.0) == '1.0'\nAssertionError: assert '1' == '1.0'\n\nThis test was passing before commit a3f9b2c (\"Optimize float serialization\").\nThe encoder previously returned '1.0' for whole floats, now returns '1'.\n\nshort test summary info\nFAILED Lib/test/test_json/test_encode.py::TestJSONEncode::test_json_encode_float\n1 failed in 0.84s"
+}

@@ -1,0 +1,10 @@
+{
+  "failure_type": "env_issue",
+  "repo": "python/cpython",
+  "runner": "github-actions",
+  "timestamp": "2026-05-27T15:44:31Z",
+  "test_name": "test_ssl_handshake",
+  "source_run_id": 0,
+  "source_file": "synthetic",
+  "raw_excerpt": "FAILED Lib/test/test_ssl.py::ThreadedTests::test_ssl_handshake\n\n================================ ERRORS ===================================\n___________ ERROR at setup of ThreadedTests::test_ssl_handshake ____________\n\nTraceback (most recent call last):\n  File \"D:\\a\\cpython\\cpython\\Lib\\test\\test_ssl.py\", line 53, in setUpClass\n    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)\n  File \"D:\\a\\cpython\\cpython\\Lib\\ssl.py\", line 547, in __init__\n    self._ctx = _ssl._SSLContext(protocol)\nssl.SSLError: [SSL: NO_CIPHER_SELECTED] no cipher could be selected (_ssl.c:803)\n\nNote: OpenSSL version on this runner is 1.0.2k-fips, which does not support\nthe cipher suites required by PROTOCOL_TLS_CLIENT. A minimum of OpenSSL\n1.1.1 is required. Update the runner's OpenSSL installation before\nrunning this test suite.\n\nshort test summary info\nFAILED Lib/test/test_ssl.py::ThreadedTests::test_ssl_handshake - ssl.SSLError: NO_CIPHER_SELECTED\n1 error in 0.29s"
+}

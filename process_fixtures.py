@@ -1,54 +1,76 @@
 import json
 import re
+import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+from dotenv import load_dotenv
+from langchain_anthropic import ChatAnthropic
+
+load_dotenv()
+
 
 # ---------------------------------------------------------------------------
-# Classification heuristics
-# Each entry is (failure_type, list_of_signals).
-# Order matters — first match wins.
+# LLM-based classification — replaces regex heuristics
 # ---------------------------------------------------------------------------
 
-FAILURE_SIGNATURES = [
-    ("timeout", [
-        "timed out", "timeout", "exceeded", "killed", "wall time",
-        "DurationWarning", "TIMEOUT"
-    ]),
-    ("env_issue", [
-        "ModuleNotFoundError", "ImportError", "No such file",
-        "Permission denied", "command not found", "library not found",
-        "Segmentation fault", "core dumped", "OSError", "FileNotFoundError",
-        "ConnectionRefusedError", "cannot open shared object"
-    ]),
-    ("flaky", [
-        "intermittent", "flaky", "FLAKE", "ResourceWarning",
-        "random seed", "non-deterministic", "occasionally fails"
-    ]),
-    ("regression", [
-        "was", "previously", "expected.*but got", "used to",
-        "broken since", "regressed", "AssertionError.*!=",
-    ]),
-    ("logic_bug", [
-        "AssertionError", "assert ", "FAILED", "ERROR",
-        "wrong result", "incorrect", "unexpected value"
-    ]),
-]
+def get_llm():
+    return ChatAnthropic(
+        model="claude-sonnet-4-20250514",
+        temperature=0,
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY")
+    )
 
 
-def classify_failure(text: str) -> str:
-    text_lower = text.lower()
-    for failure_type, signals in FAILURE_SIGNATURES:
-        for signal in signals:
-            if re.search(signal, text, re.IGNORECASE):
-                return failure_type
-    return "logic_bug"  # fallback — most generic
-
-
-def extract_failure_section(log: str, context_lines: int = 60) -> str | None:
+def classify_failure(excerpt: str) -> str:
     """
-    Finds the first hard failure marker and returns surrounding context.
-    Returns None if no failure found (log is clean or non-test step).
+    Classifies a test failure excerpt using an LLM.
+    Falls back to 'logic_bug' if classification fails.
     """
+    llm = get_llm()
+
+    prompt = f"""
+Classify this CI test failure excerpt into exactly one of these types:
+
+- timeout: exceeded time limit, process killed, wall time exceeded, ReadTimeout
+- env_issue: missing dependency, ImportError, ModuleNotFoundError, binary not found, ConnectionRefused
+- flaky: passes sometimes fails sometimes — requires explicit evidence of non-determinism such as ResourceWarning, random seed, timing variance, or historical pass rate
+- regression: was passing before, now fails — requires explicit evidence of a prior passing state such as "previously", "used to", "before commit"
+- logic_bug: consistent deterministic failure, assertion mismatch, wrong computed value — use this when no other type clearly fits
+
+Disambiguation rules:
+- flaky requires non-determinism evidence — a single failure with no such evidence is logic_bug
+- regression requires prior passing state evidence — without it, use logic_bug
+- env_issue takes priority over logic_bug when an ImportError or connection error is present
+- timeout takes priority over all others when wall time or process kill is present
+
+Return JSON only, no explanation:
+{{"failure_type": "<one of the five types>", "confidence": "<high|medium|low>"}}
+
+Excerpt:
+{excerpt}
+"""
+
+    try:
+        response = llm.invoke(prompt)
+        text = response.content if isinstance(response.content, str) else ""
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if not match:
+            return "logic_bug"
+        result = json.loads(match.group())
+        failure_type = result.get("failure_type", "logic_bug")
+        confidence = result.get("confidence", "low")
+        print(f"    classified as: {failure_type} ({confidence})")
+        return failure_type
+    except Exception as e:
+        print(f"    LLM classification failed: {e} — falling back to logic_bug")
+        return "logic_bug"
+
+
+# ---------------------------------------------------------------------------
+# Extraction helpers (unchanged)
+# ---------------------------------------------------------------------------
+
+def extract_failure_section(log: str, context_lines: int = 80) -> str | None:
     failure_markers = [
         r"^(FAILED|ERROR|ERRORS)\b",
         r"= FAILURES =",
@@ -57,7 +79,7 @@ def extract_failure_section(log: str, context_lines: int = 60) -> str | None:
         r"AssertionError",
         r"test_\w+ \.\.\. (FAIL|ERROR)",
     ]
-    
+
     lines = log.splitlines()
     for i, line in enumerate(lines):
         for marker in failure_markers:
@@ -65,17 +87,16 @@ def extract_failure_section(log: str, context_lines: int = 60) -> str | None:
                 start = max(0, i - 10)
                 end = min(len(lines), i + context_lines)
                 return "\n".join(lines[start:end])
-    
+
     return None
 
 
 def extract_test_name(excerpt: str) -> str:
-    """Best-effort extraction of the failing test name."""
     patterns = [
-        r"FAILED ([\w/\.]+::[\w]+)",          # pytest style
-        r"ERROR: (test_\w+)",                   # unittest style
-        r"(test_\w+) \.\.\. (FAIL|ERROR)",     # verbose unittest
-        r"File \".*\", line \d+, in (test_\w+)", # traceback
+        r"FAILED ([\w/\.]+::[\w]+)",
+        r"ERROR: (test_\w+)",
+        r"(test_\w+) \.\.\. (FAIL|ERROR)",
+        r"File \".*\", line \d+, in (test_\w+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, excerpt)
@@ -84,11 +105,14 @@ def extract_test_name(excerpt: str) -> str:
     return "unknown"
 
 
+# ---------------------------------------------------------------------------
+# Main processing loop (unchanged except for low-confidence warning)
+# ---------------------------------------------------------------------------
+
 def process_raw_logs(raw_dir: str = "fixtures/raw", output_dir: str = "fixtures/processed"):
     raw_path = Path(raw_dir)
     output_path = Path(output_dir)
 
-    # Counters per failure type — we want max 3 per type
     MAX_PER_TYPE = 3
     type_counters: dict[str, int] = {
         "flaky": 0, "regression": 0,
@@ -105,7 +129,7 @@ def process_raw_logs(raw_dir: str = "fixtures/raw", output_dir: str = "fixtures/
             continue
 
         metadata = json.loads(metadata_file.read_text())
-        timestamp = datetime.utcnow().isoformat() + "Z"  
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         repo = metadata.get("repo", "python/cpython")
 
         for log_file in sorted(run_dir.glob("*.txt")):
@@ -113,17 +137,17 @@ def process_raw_logs(raw_dir: str = "fixtures/raw", output_dir: str = "fixtures/
 
             excerpt = extract_failure_section(content)
             if excerpt is None:
-                continue  # skip non-failure steps (setup, checkout, etc.)
+                continue
 
+            print(f"  processing: {log_file.name}")
             failure_type = classify_failure(excerpt)
 
             if type_counters[failure_type] >= MAX_PER_TYPE:
-                continue  # already have enough of this type
+                continue
 
             type_counters[failure_type] += 1
             idx = type_counters[failure_type]
 
-            # Write fixture
             type_dir = output_path / failure_type
             type_dir.mkdir(parents=True, exist_ok=True)
 
@@ -140,7 +164,7 @@ def process_raw_logs(raw_dir: str = "fixtures/raw", output_dir: str = "fixtures/
 
             out_file = type_dir / f"{idx:03d}.json"
             out_file.write_text(json.dumps(fixture, indent=2))
-            print(f"[{failure_type}] {idx:03d} ← run {run_id} / {log_file.name}")
+            print(f"  [{failure_type}] {idx:03d} ← run {run_id} / {log_file.name}")
 
     print("\n--- Summary ---")
     for t, count in type_counters.items():

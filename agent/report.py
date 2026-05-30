@@ -1,5 +1,4 @@
 import os
-import re
 from langchain_anthropic import ChatAnthropic
 from agent.state import AgentState
 
@@ -28,6 +27,7 @@ Input:
 - Severity: {state["severity"]}
 - Root cause: {state["root_cause"]}
 - Recommended action: {state["recommended_action"]}
+- Repo: {state["repo"]}
 
 Produce the report in this exact format:
 
@@ -36,6 +36,7 @@ CI FAILURE REPORT
 Test:       <test_name>
 Runner:     <runner>
 Time:       <timestamp>
+Repo:       <repo>
 
 CLASSIFICATION
 --------------
