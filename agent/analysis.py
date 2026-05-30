@@ -63,18 +63,19 @@ Excerpt:
 """,
 
     "env_issue": """
-You are analyzing an environment issue — the test failed because of a missing dependency, wrong library version, missing binary, or infrastructure problem.
+You are analyzing an environment issue — the test failed because of a missing dependency, 
+wrong library version, missing binary, or infrastructure problem.
 
 Your goal:
 1. Identify the exact missing or misconfigured component
 2. Determine the scope: affects only this test, this module, or the entire test suite
 3. Provide the exact command or config change needed to fix it
 
-Severity criteria:
-- critical: blocks entire test suite collection or CI pipeline
-- high: blocks a specific test module
-- medium: affects a single test, workaround exists
-- low: informational, non-blocking
+Severity criteria — apply strictly:
+- critical: import failure or missing binary that blocks entire test collection
+- high: failure in test setup that blocks a specific module
+- medium: failure that affects a single test, workaround exists
+- low: non-blocking warning or informational issue
 
 Return JSON only:
 {{
