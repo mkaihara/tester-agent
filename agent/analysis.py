@@ -1,7 +1,10 @@
 import os
 import json
 import re
+import requests
 from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, ToolMessage
 from agent.state import AgentState
 
 
@@ -14,32 +17,56 @@ def get_llm():
 
 
 # ---------------------------------------------------------------------------
-# Per-type prompt templates
-# Each one looks for different signals and recommends different actions
+# Tool definition
+# ---------------------------------------------------------------------------
+
+@tool
+def get_test_run_history(repo: str, test_name: str, lookback_runs: int = 10) -> dict:
+    """
+    Retrieves recent CI run results for a repository and estimates flaky
+    probability based on pass/fail ratio across recent runs.
+
+    Args:
+        repo: GitHub repo in 'owner/name' format e.g. 'python/cpython'
+        test_name: the name of the test to look up
+        lookback_runs: how many recent completed runs to check
+    """
+    token = os.getenv("GITHUB_TOKEN")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+
+    owner, name = repo.split("/")
+    runs_url = f"https://api.github.com/repos/{owner}/{name}/actions/runs"
+    response = requests.get(
+        runs_url,
+        headers=headers,
+        params={"per_page": lookback_runs, "status": "completed"}
+    )
+    response.raise_for_status()
+    runs = response.json()["workflow_runs"]
+
+    failures = sum(1 for r in runs if r["conclusion"] == "failure")
+    total = len(runs)
+    flaky_probability = round(failures / total, 2) if total > 0 else 0.0
+
+    return {
+        "test_name": test_name,
+        "runs_checked": total,
+        "failures": failures,
+        "passes": total - failures,
+        "flaky_probability": flaky_probability,
+        # genuinely flaky: fails sometimes but not always
+        "verdict": "flaky" if 0.1 < flaky_probability < 0.9 else "consistent",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Per-type prompt templates 
 # ---------------------------------------------------------------------------
 
 ANALYSIS_PROMPTS = {
-
-    "flaky": """
-You are analyzing a flaky test failure — a test that passes sometimes and fails sometimes.
-
-Your goal:
-1. Identify the non-determinism source: timing, concurrency, external service, random seed, resource leak, or order-dependent state
-2. Estimate how often this test likely fails (if inferable)
-3. Recommend a concrete fix: retry logic, test isolation, mock the external dependency, fix the race condition
-
-Return JSON only:
-{{
-  "root_cause": "<one sentence identifying the specific non-determinism source>",
-  "recommended_action": "<concrete fix, not generic advice>",
-  "severity": "<critical|high|medium|low>",
-  "rerun_suggested": <true|false>
-}}
-
-Test name: {test_name}
-Excerpt:
-{raw_excerpt}
-""",
 
     "regression": """
 You are analyzing a regression — a test that was passing before and is now failing.
@@ -63,7 +90,7 @@ Excerpt:
 """,
 
     "env_issue": """
-You are analyzing an environment issue — the test failed because of a missing dependency, 
+You are analyzing an environment issue — the test failed because of a missing dependency,
 wrong library version, missing binary, or infrastructure problem.
 
 Your goal:
@@ -133,6 +160,84 @@ Excerpt:
 """,
 }
 
+
+# ---------------------------------------------------------------------------
+# Flaky analysis node — with tool calling
+# ---------------------------------------------------------------------------
+
+def flaky_analysis_node(state: AgentState) -> AgentState:
+    """
+    Analyzes flaky test failures. Uses get_test_run_history tool when the
+    excerpt alone does not contain clear evidence of non-determinism.
+    """
+    llm_with_tools = get_llm().bind_tools([get_test_run_history])
+
+    prompt = f"""
+You are analyzing a potentially flaky test failure.
+
+You have access to a tool that retrieves recent CI run history for a repository.
+Use it if the excerpt does not contain clear evidence of flakiness such as
+explicit intermittent language, timing variance, or historical pass rate.
+
+Test name: {state["test_name"]}
+Repo: python/cpython
+
+Based on the excerpt and any tool results, determine:
+1. Whether this is genuinely flaky or a consistent failure mislabelled as flaky
+2. The estimated flaky probability (0.0 to 1.0)
+3. The most likely non-determinism source: timing, concurrency, external service,
+   random seed, resource leak, or order-dependent state
+4. The recommended fix
+
+Return JSON only:
+{{
+  "root_cause": "<non-determinism source or reason it is not actually flaky>",
+  "recommended_action": "<concrete fix: retry logic, mock, isolation, or escalate to logic_bug>",
+  "severity": "<critical|high|medium|low>",
+  "flaky_probability": <0.0 to 1.0>,
+  "tool_was_called": <true|false>
+}}
+
+Excerpt:
+{state["raw_excerpt"]}
+"""
+
+    messages = [HumanMessage(content=prompt)]
+    response = llm_with_tools.invoke(messages)
+
+    # If the model decided to call the tool, execute it and feed the result back
+    if response.tool_calls:
+        tool_call = response.tool_calls[0]
+        tool_result = get_test_run_history.invoke(tool_call["args"])
+
+        messages = [
+            HumanMessage(content=prompt),
+            response,
+            ToolMessage(
+                content=json.dumps(tool_result),
+                tool_call_id=tool_call["id"],
+            ),
+        ]
+        response = llm_with_tools.invoke(messages)
+
+    text = response.content
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON found in flaky analysis response:\n{text}")
+
+    result = json.loads(match.group())
+
+    return {
+        **state,
+        "root_cause": result.get("root_cause", "Not determined"),
+        "recommended_action": result.get("recommended_action", "Not determined"),
+        "severity": result.get("severity", "medium"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Generic analysis node — all other failure types
+# ---------------------------------------------------------------------------
 
 def analysis_node(state: AgentState) -> AgentState:
     failure_type = state["failure_type"]
