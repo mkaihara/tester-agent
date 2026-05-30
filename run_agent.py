@@ -6,7 +6,7 @@ load_dotenv(Path(__file__).parent / ".env")
 import json
 from agent.graph import build_graph
 
-fixture_path = Path("fixtures/processed/flaky/001.json")
+fixture_path = Path("fixtures/processed/flaky/002.json")
 fixture = json.loads(fixture_path.read_text())
 
 graph = build_graph()
@@ -17,6 +17,7 @@ result = graph.invoke(
         "test_name":   fixture["test_name"],
         "runner":      fixture["runner"],
         "timestamp":   fixture["timestamp"],
+        "repo":        fixture.get("repo", "python/cpython"), 
     },
     config={
         "run_name": f"eval-{fixture['failure_type']}-{fixture_path.stem}",

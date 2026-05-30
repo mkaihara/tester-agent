@@ -6,6 +6,7 @@ class AgentState(TypedDict):
     test_name: str
     runner: str
     timestamp: str
+    repo: str
 
     # Triage node output
     failure_type: Optional[str]      # flaky | regression | env_issue | logic_bug | timeout

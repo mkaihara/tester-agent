@@ -17,6 +17,7 @@ for fixture_file in Path("fixtures/processed").rglob("*.json"):
         "test_name":   fixture["test_name"],
         "runner":      fixture["runner"],
         "timestamp":   fixture["timestamp"],
+        "repo":        fixture.get("repo","python/cpython"),
     })
     correct = result["failure_type"] == fixture["failure_type"]
     results.append(correct)

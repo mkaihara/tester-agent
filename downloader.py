@@ -51,7 +51,7 @@ def download_run_logs(owner: str, repo: str, run_id: int, token: str) -> dict[st
     
     return logs
 
-def save_logs(logs: dict[str, str], run_id: int, output_dir: str = "fixtures/raw") -> Path:
+def save_logs(logs: dict[str, str], run_id: int, repo: str, output_dir: str = "fixtures/raw") -> Path:
     """
     Saves each log file to fixtures/raw/{run_id}/.
     Also writes a metadata.json with the run_id and file list.
@@ -69,6 +69,7 @@ def save_logs(logs: dict[str, str], run_id: int, output_dir: str = "fixtures/raw
     # Write a metadata sidecar
     metadata = {
         "run_id": run_id,
+        "repo": repo,
         "file_count": len(logs),
         "files": list(logs.keys()),
     }
@@ -80,13 +81,13 @@ def save_logs(logs: dict[str, str], run_id: int, output_dir: str = "fixtures/raw
 
 token=os.getenv("GITHUB_TOKEN")
 runs = get_recent_failed_run_id("python", "cpython", token)
+repo = "python/cpython"
 
 for run in runs:
     print(f"Using run: {run['name']} | id: {run['id']} | created: {run['created_at']}")
     run_id = run["id"]
     logs = download_run_logs("python", "cpython", run_id=run_id, token=token)
-    save_logs(logs, run_id)
-
+    save_logs(logs, run_id, repo)
 
 # Print just the test-related steps
 #for filename, content in logs.items():

@@ -105,7 +105,8 @@ def process_raw_logs(raw_dir: str = "fixtures/raw", output_dir: str = "fixtures/
             continue
 
         metadata = json.loads(metadata_file.read_text())
-        timestamp = datetime.utcnow().isoformat() + "Z"  # approximate
+        timestamp = datetime.utcnow().isoformat() + "Z"  
+        repo = metadata.get("repo", "python/cpython")
 
         for log_file in sorted(run_dir.glob("*.txt")):
             content = log_file.read_text(encoding="utf-8", errors="replace")
@@ -128,6 +129,7 @@ def process_raw_logs(raw_dir: str = "fixtures/raw", output_dir: str = "fixtures/
 
             fixture = {
                 "failure_type": failure_type,
+                "repo": repo,
                 "runner": "github-actions",
                 "timestamp": timestamp,
                 "test_name": extract_test_name(excerpt),

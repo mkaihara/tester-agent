@@ -21,7 +21,7 @@ def get_llm():
 # ---------------------------------------------------------------------------
 
 @tool
-def get_test_run_history(repo: str, test_name: str, lookback_runs: int = 10) -> dict:
+def get_test_run_history(repo: str, test_name: str, lookback_runs: int = 50) -> dict:
     """
     Retrieves recent CI run results for a specific test name by downloading
     logs for each run and searching for pass/fail of that test.
@@ -229,7 +229,7 @@ Use it if the excerpt does not contain clear evidence of flakiness such as
 explicit intermittent language, timing variance, or historical pass rate.
 
 Test name: {state["test_name"]}
-Repo: python/cpython
+Repo: {state["repo"]}
 
 Based on the excerpt and any tool results, determine:
 1. Whether this is genuinely flaky or a consistent failure mislabelled as flaky
