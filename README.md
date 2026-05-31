@@ -1,3 +1,5 @@
+![tester_agent](images/banner.png)
+
 # tester-agent
 
 An autonomous CI test failure analyst built with LangGraph. Given a test failure excerpt, the agent classifies the failure type, performs root cause analysis, and produces a structured report — routing each failure through a specialized analysis pipeline rather than treating all failures identically.
