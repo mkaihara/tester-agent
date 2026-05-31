@@ -239,13 +239,13 @@ All runs are traced in LangSmith with per-node visibility into inputs, outputs, 
 
 ```
 LangGraph  153.19s  ~20.5K tokens / $0.07
-  ├── triage              3.33s    input: raw_excerpt → output: failure_type, confidence
-  ├── route_by_failure_type  0.00s
-  ├── flaky_analysis     142.86s
-  │     ├── ChatAnthropic   4.12s   initial analysis + tool call decision
+  ├── triage                        3.33s   input: raw_excerpt → output: failure_type, confidence
+  ├── route_by_failure_type         0.00s
+  ├── flaky_analysis              142.86s
+  │     ├── ChatAnthropic           4.12s   initial analysis + tool call decision
   │     ├── get_test_run_history  132.30s   GitHub API — downloads logs for 50 runs
-  │     └── ChatAnthropic   6.44s   final classification with history evidence
-  └── report              7.00s    input: full state → output: structured report
+  │     └── ChatAnthropic           6.44s   final classification with history evidence
+  └── report                        7.00s   input: full state → output: structured report
 ```
 
 The `get_test_run_history` step dominates latency because it downloads and searches log ZIPs for each of the 50 lookback runs. This is expected — the tool is called only when the excerpt alone is insufficient, and the added evidence qualitatively improves the root cause hypothesis.
