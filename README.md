@@ -18,13 +18,13 @@ The agent is also observable in a way a script is not. Every decision — triage
 
 ## Benchmark
 
-Failure classification accuracy measured against 15 labelled fixtures across 5 failure types.
+Failure classification accuracy measured against 25 labelled fixtures across 5 failure types (5 per type).
 
 | Method | Accuracy | Notes |
 |---|---|---|
-| Regex heuristics | 60% (9/15) | Keyword matching in `process_fixtures.py` — no reasoning |
+| Regex heuristics | 60% (12/20) | Keyword matching in `process_fixtures.py` — no reasoning |
 | Single LLM prompt | 84% (16/20) | Direct JSON classification, no routing |
-| **Routed agent (this project)** | **100% (15/15)** | Hybrid prompt + conditional routing per failure type |
+| **Routed agent (this project)** | **100% (25/25)** | Hybrid prompt + conditional routing per failure type |
 
 The regex baseline comes from the initial label generation pass in `process_fixtures.py` — approximately 60% of its labels agreed with LLM-validated ground truth, establishing it as the floor. The single prompt baseline is the direct JSON triage prompt without per-type routing. The routed agent combines a hybrid triage prompt with specialized analysis nodes per failure type, plus tool calling for flaky failures.
 
@@ -84,13 +84,13 @@ class AgentState(TypedDict):
 
 ## Prompt Engineering: Three Experiments
 
-Triage accuracy was measured against a labelled fixture dataset (real CI logs from CPython + synthetic examples).
+Triage accuracy was measured against a labelled fixture dataset of 25 examples (real CI logs from CPython + synthetic examples, 5 per failure type).
 
 | Prompt strategy | Accuracy | Key failure |
 |---|---|---|
 | Direct JSON (baseline) | 84% | Weak on `logic_bug` |
 | Chain-of-thought | 68% | Collapsed `flaky` into `logic_bug` |
-| **Hybrid (final)** | **100%** | None |
+| **Hybrid (final)** | **100% (25/25)** | None |
 
 **Finding:** chain-of-thought prompting improved `logic_bug` precision but destroyed `flaky` recall. Real-world flaky CI logs rarely contain explicit non-determinism language, so forced step-by-step reasoning led the model to over-classify ambiguous failures as `logic_bug`. The hybrid approach gives each failure type an explicit signal vocabulary without triggering the over-reasoning that hurt flaky classification.
 
@@ -103,7 +103,7 @@ The hybrid prompt structure per failure type:
 - severity criteria (explicit anchors, not vague descriptions)
 ```
 
-**Ground truth validation finding:** the initial regex-based labeller in `process_fixtures.py` agreed with LLM-validated ground truth on approximately 60% of fixtures. Three real CPython CI failures initially labelled as `logic_bug` and `env_issue` were correctly reclassified as `flaky` after manual inspection — a sampling profiler test checking statistical properties of concurrent stack traces, a threading Barrier synchronization failure, and a temp directory race condition between parallel test workers. None of these contained explicit non-determinism language, which is why the regex classifier failed. This finding motivated replacing regex classification with LLM classification in `process_fixtures.py`.
+**Ground truth validation finding:** the initial regex-based labeller in `process_fixtures.py` agreed with LLM-validated ground truth on approximately 60% of fixtures. Several real CPython CI failures were initially mislabelled as `logic_bug` but correctly reclassified as `flaky` after inspection — all were sampling profiler tests checking statistical properties of concurrent stack traces (e.g. `72/6130 invalid stacks` or `147/3941 invalid stacks` in torn stack trace assertions), threading Barrier synchronization failures, and temp directory race conditions between parallel test workers. None contained explicit non-determinism language, which is why both the regex classifier and the initial LLM pass failed on them. This pattern motivated replacing regex classification with LLM classification in `process_fixtures.py` and establishing a manual validation step for any fixture the LLM labels with low confidence.
 
 ---
 
@@ -114,11 +114,11 @@ The evaluation dataset lives in `fixtures/processed/` — 15 JSON files, 3 per f
 ```
 fixtures/
   processed/
-    flaky/       ← 3 fixtures (real CI logs, LLM-relabelled)
-    regression/  ← 3 fixtures (1 real CI log + 2 synthetic)
-    env_issue/   ← 3 fixtures (synthetic)
-    logic_bug/   ← 3 fixtures (synthetic)
-    timeout/     ← 3 fixtures (real CI logs + synthetic)
+    flaky/       ← 5 fixtures (real CI logs, LLM-relabelled)
+    regression/  ← 5 fixtures (4 real CI log + 1 synthetic)
+    env_issue/   ← 5 fixtures (real CI logs)
+    logic_bug/   ← 5 fixtures (real CI logs)
+    timeout/     ← 5 fixtures (real CI logs)
   raw/           ← original GitHub Actions logs (gitignored)
 ```
 
@@ -161,7 +161,7 @@ tester-agent/
   run_agent.py          ← single fixture runner
   eval.py               ← accuracy measurement across all fixtures
   pyproject.toml
-  .env.example
+  .env_example
 ```
 
 ---

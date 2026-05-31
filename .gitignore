@@ -218,6 +218,3 @@ __marimo__/
 .streamlit/secrets.toml
 .DS_Store
 /fixtures/raw/*
-fixture_explanations.txt
-/fixtures/raw_new
-/fixtures/processed_new
