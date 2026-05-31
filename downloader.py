@@ -16,7 +16,7 @@ def get_recent_failed_runs(owner: str, repo: str, token: str) -> list:
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
     }
-    response = requests.get(url, headers=headers, params={"status": "failure", "per_page": 50})
+    response = requests.get(url, headers=headers, params={"status": "failure", "per_page": 100})
     response.raise_for_status()
 
     runs = response.json()["workflow_runs"]

@@ -32,32 +32,7 @@ The regex baseline comes from the initial label generation pass in `process_fixt
 
 ## Architecture
 
-```
-Input (test failure excerpt + repo + metadata)
-        │
-        ▼
-┌───────────────┐
-│  Triage Node  │  Classifies failure type + confidence
-└───────┬───────┘
-        │
-        ▼ (conditional routing by failure_type)
-        │
-        ├─── flaky ──────► ┌────────────────────────────┐
-        │                  │     Flaky Analysis Node    │
-        │                  │    + get_test_run_history  │ ← tool call to GitHub API
-        │                  └───────────────────────┬────┘
-        │                                          │
-        │                    Per-type specialized  │
-        ├─── regression ─►          prompt         │
-        ├─── env_issue ──►  ┌───────────────────┐  │
-        ├─── logic_bug ──►  │   Analysis Node   │  │
-        └─── timeout ────►  └─────────┬─────────┘  │
-                                      │            │   
-                                      ▼            ▼
-                            ┌─────────────────────────┐
-                            │       Report Node       │  Structured plain-text report
-                            └─────────────────────────┘
-```
+![architecture](images/architecture.png)
 
 ### Tool: get_test_run_history
 

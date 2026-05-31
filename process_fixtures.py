@@ -113,7 +113,7 @@ def process_raw_logs(raw_dir: str = "fixtures/raw", output_dir: str = "fixtures/
     raw_path = Path(raw_dir)
     output_path = Path(output_dir)
 
-    MAX_PER_TYPE = 3
+    MAX_PER_TYPE = 20
     type_counters: dict[str, int] = {
         "flaky": 0, "regression": 0,
         "env_issue": 0, "logic_bug": 0, "timeout": 0
