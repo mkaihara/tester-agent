@@ -7,11 +7,40 @@ def get_llm():
     return ChatAnthropic(
         model="claude-sonnet-4-20250514",
         temperature=0,
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY")
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        max_retries=3, 
     )
 
 
 def report_node(state: AgentState) -> AgentState:
+    # Short-circuit for unclassified failures
+    if state.get("failure_type") == "unclassified":
+        report = (
+            "CI FAILURE REPORT\n"
+            "=================\n"
+            f"Test:       {state['test_name']}\n"
+            f"Runner:     {state['runner']}\n"
+            f"Time:       {state['timestamp']}\n"
+            f"Repo:       {state['repo']}\n\n"
+            "CLASSIFICATION\n"
+            "--------------\n"
+            "Type:       unclassified\n"
+            f"Confidence: low\n"
+            f"Iterations: {state.get('eval_iterations', 0)}\n\n"
+            "ROOT CAUSE\n"
+            "----------\n"
+            "The triage system and evaluator could not agree on a classification "
+            f"after {state.get('eval_iterations', 0)} iterations. "
+            "The excerpt may be ambiguous, truncated, or contain signals consistent "
+            "with multiple failure types. Manual inspection is required.\n\n"
+            "RECOMMENDED ACTION\n"
+            "------------------\n"
+            "Review the raw excerpt below and classify manually. Consider retrieving "
+            "additional log context from the source CI run.\n\n"
+            f"Raw excerpt:\n{state['raw_excerpt']}"
+        )
+        return {**state, "report": report}
+
     prompt = f"""
 You are a technical writer producing a concise CI failure report for a software engineering team.
 

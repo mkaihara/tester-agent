@@ -1,5 +1,3 @@
-![tester_agent](images/banner.png)
-
 # tester-agent
 
 An autonomous CI test failure analyst built with LangGraph. Given a test failure excerpt, the agent classifies the failure type, performs root cause analysis, and produces a structured report — routing each failure through a specialized analysis pipeline rather than treating all failures identically.
@@ -30,11 +28,44 @@ Failure classification accuracy measured against 25 labelled fixtures across 5 f
 | **Routed agent + GPT-4o evaluator** | **100% (25/25)** | Reflection loop catches residual misclassifications |
 
 The regex baseline comes from the initial label generation pass in `process_fixtures.py`. The single prompt baseline is direct JSON classification without routing. The routed agent without evaluator achieved 96% — one fixture was a CPython forkserver signal-handling test (`test_forkserver_sigkill`) that the triage node classified as `logic_bug` because the excerpt showed a bare `AssertionError` with no explicit non-determinism language. The GPT-4o evaluator rejected that classification, correctly identifying the failure as a timing-dependent cross-process synchronization test and triggering a triage revision that produced the correct `flaky` label.
+
 ---
 
 ## Architecture
 
-![architecture](images/architecture.png)
+```
+Input (test failure excerpt + repo + metadata)
+        │
+        ▼
+┌───────────────┐
+│  Triage Node  │◄─────────────────────────────────────┐
+│  Claude S4    │  Classifies failure type + reasoning  │
+└───────┬───────┘                                       │
+        │                                               │ reject + feedback
+        ▼                                               │ (max 3 iterations)
+┌───────────────┐                                       │
+│  Evaluator    │  GPT-4o independently reviews         │
+│  Node GPT-4o  │  classification against excerpt       │
+└───────┬───────┘                                       │
+        │                                               │
+        ├── reject ─────────────────────────────────────┘
+        │
+        ├── approve + flaky ──► ┌──────────────────────────┐
+        │                       │   Flaky Analysis Node    │
+        │                       │  + get_test_run_history  │ ← tool call to GitHub API
+        │                       └───────────┬──────────────┘
+        │                                   │
+        ├── approve + regression ─►         │
+        ├── approve + env_issue ──►  ┌──────────────────┐
+        ├── approve + logic_bug ──►  │   Analysis Node  │  Per-type specialized prompt
+        ├── approve + timeout ────►  └────────┬─────────┘
+        │                                     │
+        └── max iterations ──────────────────►│
+                                              ▼
+                                    ┌───────────────────┐
+                                    │   Report Node     │  Structured plain-text report
+                                    └───────────────────┘
+```
 
 ### Reflection Pattern
 
@@ -121,16 +152,16 @@ The residual 4% error (one fixture) was a CPython multiprocessing signal-handlin
 
 ## Fixture Dataset
 
-The evaluation dataset lives in `fixtures/processed/` — 15 JSON files, 3 per failure type.
+The evaluation dataset lives in `fixtures/processed/` — 25 JSON files, 5 per failure type.
 
 ```
 fixtures/
   processed/
-    flaky/       ← 6 fixtures (real CI logs, LLM-relabelled)
-    regression/  ← 5 fixtures (4 real CI log + 1 synthetic)
-    env_issue/   ← 5 fixtures (real CI logs)
-    logic_bug/   ← 4 fixtures (real CI logs)
-    timeout/     ← 5 fixtures (real CI logs)
+    flaky/       ← 5 fixtures (real CI logs, LLM-relabelled)
+    regression/  ← 5 fixtures (real CI logs + synthetic)
+    env_issue/   ← 5 fixtures (real CI logs + synthetic)
+    logic_bug/   ← 5 fixtures (real CI logs + synthetic)
+    timeout/     ← 5 fixtures (real CI logs + synthetic)
   raw/           ← original GitHub Actions logs (gitignored)
 ```
 
@@ -174,7 +205,7 @@ tester-agent/
   run_agent.py          ← single fixture runner
   eval.py               ← accuracy measurement across all fixtures
   pyproject.toml
-  .env_example
+  .env.example
 ```
 
 ---
@@ -182,6 +213,7 @@ tester-agent/
 ## Local Setup
 
 **Requirements:** Python 3.12+, [uv](https://github.com/astral-sh/uv), Anthropic API key, OpenAI API key, GitHub token, LangSmith API key (optional but recommended).
+
 ```bash
 git clone https://github.com/youruser/tester-agent
 cd tester-agent
@@ -190,7 +222,7 @@ cd tester-agent
 uv sync
 
 # Configure environment
-cp .env_example .env
+cp .env.example .env
 # Edit .env and add your keys
 
 # Run against a single fixture
@@ -200,10 +232,11 @@ uv run python run_agent.py
 uv run python eval.py
 ```
 
-**.env_example:**
+**.env.example:**
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 GITHUB_TOKEN=ghp_...
 LANGCHAIN_API_KEY=ls__...
 LANGCHAIN_TRACING_V2=true
@@ -216,7 +249,6 @@ LANGCHAIN_PROJECT=tester-agent
 
 The following report was produced for a real CPython CI failure. The agent identified a race condition in an HTTP server test, called `get_test_run_history` to verify historical flakiness, and produced a concrete remediation with file and line reference.
 
-![Example output](images/output1.png)
 ```
 CI FAILURE REPORT
 =================
@@ -246,13 +278,25 @@ test_large_content_length_truncated method. Add exception handling for
 BrokenPipeError with 2-3 retry attempts and brief delays between attempts to
 allow proper server-client synchronization.
 ```
+
 ---
 
 ## Observability
 
 All runs are traced in LangSmith with per-node visibility into inputs, outputs, latency, and token usage. For a flaky failure that required one evaluator rejection cycle before approval, the trace shows:
 
-![LangGraph trace](images/output_trace.png)
+```
+LangGraph
+  ├── triage              3.33s    input: raw_excerpt → output: failure_type, reasoning
+  ├── evaluator           2.10s    GPT-4o reviews classification → reject + feedback
+  ├── triage              3.80s    revised under criticism → new failure_type, reasoning
+  ├── evaluator           1.95s    GPT-4o reviews revised classification → approve
+  ├── flaky_analysis    142.86s
+  │     ├── ChatAnthropic   4.12s   initial analysis + tool call decision
+  │     ├── get_test_run_history  132.30s   GitHub API — downloads logs for 50 runs
+  │     └── ChatAnthropic   6.44s   final classification with history evidence
+  └── report              7.00s    input: full state → output: structured report
+```
 
 The reflection loop is fully transparent in LangSmith — you can inspect the evaluator's rejection reasoning and the triage node's revised response side by side, making it straightforward to identify systematic classification weaknesses and improve the prompts.
 

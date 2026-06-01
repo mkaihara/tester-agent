@@ -11,6 +11,11 @@ class AgentState(TypedDict):
     # Triage node output
     failure_type: Optional[str]      # flaky | regression | env_issue | logic_bug | timeout
     triage_confidence: Optional[str] # high | medium | low
+    triage_reasoning: Optional[str]  
+
+    # Evaluator state
+    eval_iterations: Optional[int]
+    evaluator_feedback: Optional[str]
 
     # Analysis node output
     root_cause: Optional[str]

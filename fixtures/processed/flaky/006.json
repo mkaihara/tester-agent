@@ -1,5 +1,5 @@
 {
-  "failure_type": "logic_bug",
+  "failure_type": "flaky",
   "repo": "python/cpython",
   "runner": "github-actions",
   "timestamp": "2026-05-31T13:15:34Z",
