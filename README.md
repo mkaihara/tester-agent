@@ -30,6 +30,7 @@ Failure classification accuracy measured against 25 labelled fixtures across 5 f
 | **Routed agent + GPT-4o evaluator** | **100% (25/25)** | Reflection loop catches residual misclassifications |
 
 The regex baseline comes from the initial label generation pass in `process_fixtures.py`. The single prompt baseline is direct JSON classification without routing. The routed agent without evaluator achieved 96% — one fixture was a CPython forkserver signal-handling test (`test_forkserver_sigkill`) that the triage node classified as `logic_bug` because the excerpt showed a bare `AssertionError` with no explicit non-determinism language. The GPT-4o evaluator rejected that classification, correctly identifying the failure as a timing-dependent cross-process synchronization test and triggering a triage revision that produced the correct `flaky` label.
+
 ---
 
 ## Architecture
