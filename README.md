@@ -218,35 +218,7 @@ LANGCHAIN_PROJECT=tester-agent
 The following report was produced for a real CPython CI failure. The agent identified a race condition in an HTTP server test, called `get_test_run_history` to verify historical flakiness, and produced a concrete remediation with file and line reference.
 
 ![Example output](images/output1.png)
-```
-CI FAILURE REPORT
-=================
-Test:       test_large_content_length_truncated
-Runner:     github-actions
-Time:       2026-05-29T15:17:11.869240Z
-Repo:       python/cpython
 
-CLASSIFICATION
---------------
-Type:       flaky
-Confidence: high
-Severity:   medium
-
-ROOT CAUSE
-----------
-The test fails due to a timing-related race condition causing a BrokenPipeError
-during HTTP request transmission. The error occurs when the client attempts to
-send data through a socket connection that has been prematurely closed by the
-server, indicating a synchronization issue between the CGI server and client
-components in the test setup.
-
-RECOMMENDED ACTION
-------------------
-Implement retry logic in Lib/test/test_httpservers.py around line 1028 in the
-test_large_content_length_truncated method. Add exception handling for
-BrokenPipeError with 2-3 retry attempts and brief delays between attempts to
-allow proper server-client synchronization.
-```
 ---
 
 ## Observability
