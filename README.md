@@ -171,7 +171,6 @@ tester-agent/
     raw/                ← raw CI logs (gitignored)
   downloader.py         ← GitHub Actions log downloader
   process_fixtures.py   ← ETL: raw logs → LLM-labelled fixtures
-  explain_fixtures.py   ← LLM-based label validation
   run_agent.py          ← single fixture runner
   eval.py               ← accuracy measurement across all fixtures
   pyproject.toml
