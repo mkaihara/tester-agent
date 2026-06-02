@@ -122,7 +122,7 @@ The residual 4% error (one fixture) was a CPython multiprocessing signal-handlin
 
 ## Fixture Dataset
 
-The evaluation dataset lives in `fixtures/processed/` — 15 JSON files, 3 per failure type.
+The evaluation dataset lives in `fixtures/processed/` — 15 JSON files, approx. 5 per failure type.
 
 ```
 fixtures/
