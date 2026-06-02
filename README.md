@@ -104,7 +104,7 @@ class AgentState(TypedDict):
 
 ## Prompt Engineering: Three Experiments
 
-Triage accuracy was measured against a labelled fixture dataset of 25 examples (real CI logs from CPython + synthetic examples, 5 per failure type).
+Triage accuracy was measured against a labelled fixture dataset of 25 examples (real CI logs from CPython + synthetic examples, approx. 5 per failure type).
 
 | Prompt strategy | Accuracy | Key failure |
 |---|---|---|
