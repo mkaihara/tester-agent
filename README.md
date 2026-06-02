@@ -228,6 +228,130 @@ All runs are traced in LangSmith with per-node visibility into inputs, outputs, 
 
 ---
 
+## Limitations and Future Work
+
+This project is intentionally designed as a proof-of-concept agentic workflow rather than a production-grade CI failure analysis system. Several areas could be improved.
+
+### Log Parsing Portability
+
+The `get_test_run_history` tool currently determines whether a test passed or failed by searching for explicit strings in GitHub Actions logs:
+
+```python
+if f"{test_name} ... ok" in content or \
+   f"PASSED {test_name}" in content or \
+   f"{test_name} PASSED" in content:
+    ...
+
+elif f"{test_name} ... FAIL" in content or \
+     f"FAILED {test_name}" in content or \
+     f"{test_name} ... ERROR" in content or \
+     f"{test_name} FAILED" in content:
+    ...
+```
+
+This works well for the repositories used during development, but CI systems and test frameworks emit results in many different formats. Pytest, unittest, JUnit, Bazel, Cargo Test, Go Test, and custom runners often produce different pass/fail patterns.
+
+Possible improvements:
+
+* Framework-specific parsers (pytest, unittest, JUnit XML, Cargo Test, etc.)
+* Structured result extraction from JUnit or other machine-readable test reports
+* Repository-specific adapters
+* LLM-assisted log interpretation for unknown formats
+
+### Tool Latency and Scalability
+
+The `get_test_run_history` tool currently downloads and searches logs from the most recent 50 workflow runs.
+
+While this improves confidence for flaky test analysis, it is the dominant contributor to execution latency. In LangSmith traces, tool execution can account for more than 90% of total runtime.
+
+Possible improvements:
+
+* Adaptive lookback windows based on confidence
+* Early stopping once enough evidence has been collected
+* Caching previously analyzed runs
+* Parallel log downloads
+* Persisting historical test outcomes in a local database instead of repeatedly scanning logs
+* Using GitHub APIs that expose structured test results when available
+
+### Failure Excerpt Extraction
+
+The fixture generation pipeline extracts failure context using a small set of heuristics:
+
+```python
+failure_markers = [
+    r"^(FAILED|ERROR|ERRORS)\b",
+    r"= FAILURES =",
+    r"= ERRORS =",
+    r"Traceback \(most recent call last\)",
+    r"AssertionError",
+    r"test_\w+ \.\.\. (FAIL|ERROR)",
+]
+```
+
+When a marker is found, the pipeline currently captures:
+
+* up to 10 lines before the marker
+* up to 80 lines after the marker
+
+This was chosen empirically and works reasonably well on the evaluation dataset, but it is not necessarily optimal.
+
+Possible improvements:
+
+* Dynamic context sizing based on log structure
+* Learning-based selection of the most informative log region
+* Framework-specific failure extraction
+* Multiple failure-region extraction for logs containing several failures
+* Automatic minimization of irrelevant context to reduce token consumption
+
+### Failure Marker Coverage
+
+The current marker set focuses on common Python testing patterns and GitHub Actions logs.
+
+Other ecosystems may emit failures in different formats, including:
+
+* Java/JUnit stack traces
+* Rust test failures
+* Go test output
+* Bazel build failures
+* Docker and Kubernetes runtime errors
+
+Expanding marker coverage or using LLM-assisted failure localization could improve robustness across repositories and languages.
+
+### Dataset Size
+
+The evaluation dataset currently contains a relatively small number of labelled fixtures. While useful for development and comparison between prompting strategies, it is not large enough to establish statistically robust accuracy estimates.
+
+Future work includes:
+
+* Expanding the dataset across multiple repositories
+* Increasing the number of real CI failures per category
+* Benchmarking against additional baselines
+* Measuring precision and recall per failure type
+* Evaluating generalization across different programming languages and CI systems
+
+### Taxonomy Evolution
+
+The current failure taxonomy consists of:
+
+* flaky
+* regression
+* env_issue
+* logic_bug
+* timeout
+
+These categories were chosen because they map naturally to different analysis strategies. However, real-world CI systems often require finer-grained classifications such as:
+
+* infrastructure failures
+* dependency failures
+* build failures
+* security failures
+* deployment failures
+* test defects
+
+Future versions of the agent could support hierarchical or multi-label classification rather than the current single-label routing approach.
+
+---
+
 ## Stack
 
 - [LangGraph](https://github.com/langchain-ai/langgraph) — agent graph, state management, conditional routing, reflection loop, tool calling
