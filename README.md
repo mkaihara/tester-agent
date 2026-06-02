@@ -222,11 +222,9 @@ The following report was produced for a real CPython CI failure. The agent ident
 
 ## Observability
 
-All runs are traced in LangSmith with per-node visibility into inputs, outputs, latency, and token usage. For a flaky failure that required one evaluator rejection cycle before approval, the trace shows:
+All runs are traced in LangSmith with per-node visibility into inputs, outputs, latency, and token usage. For a flaky failure with a tool usage, the trace shows:
 
 ![LangGraph trace](images/output_trace.png)
-
-The reflection loop is fully transparent in LangSmith — you can inspect the evaluator's rejection reasoning and the triage node's revised response side by side, making it straightforward to identify systematic classification weaknesses and improve the prompts.
 
 ---
 
